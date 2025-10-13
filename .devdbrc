@@ -1,0 +1,6 @@
+[
+  {
+    "type": "sqlite",
+    "path": "/home/bwp09/Code/Python/chat/database.db"
+  }
+]
