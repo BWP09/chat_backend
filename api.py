@@ -73,7 +73,7 @@ class User(APIBase):
 
     def jsonable(self) -> typedef.jsonable:
         return {
-            "id": self.id,
+            "id": str(self.id),
             "username": self.username,
             "display_name": self.display_name,
             "bio": self.bio,
@@ -108,7 +108,7 @@ class Channel(APIBase):
     
     def jsonable(self) -> typedef.jsonable:
         return {
-            "id": self.id,
+            "id": str(self.id),
             "type": self.type.value,
             "name": self.name,
             "participants": [participant.jsonable() for participant in self.participants],
@@ -141,7 +141,7 @@ class Role(APIBase):
 
     def jsonable(self) -> typedef.jsonable:
         return {
-            "id": self.id,
+            "id": str(self.id),
             "name": self.name,
             "color": self.color,
             "mentionable": self.mentionable,
@@ -161,7 +161,7 @@ class Emoji(APIBase):
 
     def jsonable(self) -> typedef.jsonable:
         return {
-            "id": self.id,
+            "id": str(self.id),
             "name": self.name,
             "image_hash": self.image_hash,
         }
@@ -242,7 +242,7 @@ class Guild(APIBase):
 
     def jsonable(self) -> typedef.jsonable:
         return {
-            "id": self.id,
+            "id": str(self.id),
             "name": self.name,
             "owner": self.owner.jsonable(),
             # "members": [member.jsonable() for member in self.members],
@@ -327,7 +327,7 @@ class Message(APIBase):
     
     def jsonable(self) -> typedef.jsonable:
         return {
-            "id": self.id,
+            "id": str(self.id),
             "type": self.type.value,
             "channel_id": self.channel_id,
             "author": self.author.jsonable(),
@@ -405,6 +405,13 @@ class Client:
     def get_guild(self, id: int) -> tuple[int, typedef.jsonable]:
         r = rq.get(f"{self.base_url}/guilds/{id}", headers = self.__auth_header())
         
+        return r.status_code, r.json()
+    
+    def get_guilds(self) -> tuple[int, typedef.jsonable]:
+        r = rq.get(f"{self.base_url}/guilds", headers = self.__auth_header())
+        
+        print(r.headers)
+
         return r.status_code, r.json()
     
     def delete_guild(self, id: int) -> tuple[int, typedef.jsonable]:

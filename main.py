@@ -194,7 +194,7 @@ def route_auth_login():
         session.add(authtoken)
         session.commit()
 
-        return {"token": token}
+        return {"token": token, "user": api.User.from_db(user).jsonable()}
 
 @app.route(f"{base_url}/auth/logout", methods = ["POST"])
 @token_required
@@ -216,11 +216,16 @@ def route_auth_logout():
 
         return http_info("token successfully invalidated")
 
-@app.route(f"{base_url}/guilds", methods = ["POST"])
+@app.route(f"{base_url}/guilds", methods = ["GET", "POST"])
 @token_required
 def route_all_guilds():
     with sql.Session(engine) as session:
         match fl.request.method:
+            case "GET":
+                auth_user = get_auth_user(session)
+
+                return fl.jsonify([api.Guild.from_db(member.guild).jsonable() for member in auth_user.memberships])
+
             case "POST": # Create guild
                 auth_user = get_auth_user(session)
 
@@ -267,7 +272,8 @@ def route_all_guilds():
                             user_id = auth_user.id,
                             guild_id = id,
                             timed_out = False,
-                            joined_at = datetime.datetime.now()
+                            joined_at = datetime.datetime.now(),
+                            invite_id = 0
                         )]
                     )
                 )
@@ -398,7 +404,22 @@ def route_all_channels(guild_id: int):
             case _:
                 return http_error(405)
 
+@app.route(f"{base_url}/guilds/<int:guild_id>/invites", methods = ["GET", "POST"])
+@token_required
+def route_all_invites(guild_id: int):
+    with sql.Session(engine) as session:
+        match fl.request.method:
+            case "GET":
+                ...
+            
+            case "POST":
+                ...
+                
+            case _:
+                return http_error(405)
+
 @app.route(f"{base_url}/channels/<int:channel_id>", methods = ["GET", "PATCH", "DELETE"])
+@token_required
 def route_specific_channel(channel_id: int):
     with sql.Session(engine) as session:
         match fl.request.method:
@@ -422,6 +443,7 @@ def route_specific_channel(channel_id: int):
                 return http_error(405)
 
 @app.route(f"{base_url}/channels/<int:channel_id>/messages", methods = ["GET", "POST"])
+@token_required
 def route_all_messages(channel_id: int):
     with sql.Session(engine) as session:
         match fl.request.method:
@@ -500,6 +522,7 @@ def route_all_messages(channel_id: int):
                 return http_error(405)
 
 @app.route(f"{base_url}/channels/<int:channel_id>/messages/<int:message_id>", methods = ["GET", "PATCH"])
+@token_required
 def route_specific_message(channel_id: int, message_id: int):
     match fl.request.method:
         case "GET": # Get message
@@ -508,7 +531,7 @@ def route_specific_message(channel_id: int, message_id: int):
         case "PATCH": # Edit message
             return "200"
 
-        case "DELETE": # Delete channel
+        case "DELETE": # Delete message
             return "200"
 
         case _:
@@ -517,6 +540,7 @@ def route_specific_message(channel_id: int, message_id: int):
             }), 405
 
 @app.route(f"{base_url}/guilds/<int:guild_id>/members", methods = ["GET"])
+@token_required
 def route_all_members(guild_id: int):
     match fl.request.method:
         case "GET": # Get guild members
@@ -526,6 +550,7 @@ def route_all_members(guild_id: int):
             return http_error(405)
 
 @app.route(f"{base_url}/guilds/<int:guild_id>/members/<int:user_id>", methods = ["GET", "PUT", "PATCH", "DELETE"])
+@token_required
 def route_specific_member(guild_id: int, user_id: int):
     match fl.request.method:
         case "GET": # Get guild member
@@ -544,6 +569,7 @@ def route_specific_member(guild_id: int, user_id: int):
             return http_error(405)
         
 @app.route(f"{base_url}/guilds/<int:guild_id>/roles", methods = ["GET", "POST"])
+@token_required
 def route_all_roles(guild_id: int):
     match fl.request.method:
         case "GET": # Get guild roles
@@ -556,6 +582,7 @@ def route_all_roles(guild_id: int):
             return http_error(405)
 
 @app.route(f"{base_url}/guilds/<int:guild_id>/roles/<int:role_id>", methods = ["GET", "PATCH", "DELETE"])
+@token_required
 def route_specific_role(guild_id: int, role_id: int):
     match fl.request.method:
         case "GET": # Get guild role
@@ -571,6 +598,7 @@ def route_specific_role(guild_id: int, role_id: int):
             return http_error(405)
         
 @app.route(f"{base_url}/guilds/<int:guild_id>/bans", methods = ["GET"])
+@token_required
 def route_all_bans(guild_id: int):
     match fl.request.method:
         case "GET": # Get guild bans
@@ -580,6 +608,7 @@ def route_all_bans(guild_id: int):
             return http_error(405)
 
 @app.route(f"{base_url}/guilds/<int:guild_id>/bans/<int:user_id>", methods = ["GET", "PUT", "DELETE"])
+@token_required
 def route_specific_ban(guild_id: int, user_id: int):
     match fl.request.method:
         case "GET": # Get guild ban
@@ -595,6 +624,7 @@ def route_specific_ban(guild_id: int, user_id: int):
             return http_error(405)
 
 @app.route(f"{base_url}/users/<int:user_id>", methods = ["GET", "PUT"])
+@token_required
 def route_specific_user(user_id: int):
     with sql.Session(engine) as session:
         match fl.request.method:
@@ -619,6 +649,7 @@ def route_specific_user(user_id: int):
                 return http_error(405)
 
 @app.route(f"{base_url}/users/<int:user_id>/guilds", methods = ["GET", "PUT"])
+@token_required
 def route_user_guilds(user_id: int):
     with sql.Session(engine) as session:
         match fl.request.method:

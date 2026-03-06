@@ -1,7 +1,7 @@
 import api
 
 client = api.Client("http://localhost:8081")
-client.set_token("2ljy0LtPwOZlnj0zgoRCa_yVYv8_gp5kgtKirKw-wlQ")
+client.set_token("bEiTr9Ugp-aBt71-8sagbq_PkBai6MlXlxO4av6stkA")
 
 # success, r = client.auth_create(
 #     username = "bwp09",
@@ -13,8 +13,8 @@ client.set_token("2ljy0LtPwOZlnj0zgoRCa_yVYv8_gp5kgtKirKw-wlQ")
 # print(success, r)
 
 # client.get_token(
-#     username = "username",
-#     password = "password",
+#     username = "bwp09",
+#     password = "password123!",
 # )
 
 # success, r = client.revoke_token()
@@ -28,14 +28,18 @@ client.set_token("2ljy0LtPwOZlnj0zgoRCa_yVYv8_gp5kgtKirKw-wlQ")
 
 # print(status, json)
 
-status, json = client.get_guild_channels(7382529905558294528)
+# status, json = client.get_guilds()
+
+# print(status, json)
+
+# status, json = client.get_guild_channels(7382529905558294528)
+
+# print(status, json)
+
+status, json = client.create_guild_channel(7434031026608803840, "general", "general channel")
 
 print(status, json)
 
-status, json = client.create_guild_channel(7382529905558294528, "general", "general channel")
+# status, json = client.get_guild_channels(7382529905558294528)
 
-print(status, json)
-
-status, json = client.get_guild_channels(7382529905558294528)
-
-print(status, json)
+# print(status, json)

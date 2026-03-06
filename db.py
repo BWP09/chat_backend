@@ -28,20 +28,23 @@ class Guild(sql.SQLModel, table=True):
     owner_id: int = sql.Field(foreign_key="user.id")
     icon_hash: typing.Optional[str] = None
 
-    owner: "User" = sql.Relationship(back_populates="owned_guilds")
+    owner: User = sql.Relationship(back_populates="owned_guilds")
     channels: list["Channel"] = sql.Relationship(back_populates="guild")
     members: list["Member"] = sql.Relationship(back_populates="guild")
+    invites: list["Invite"] = sql.Relationship(back_populates="guild")
 
 class Member(sql.SQLModel, table=True):
     user_id: int = sql.Field(foreign_key="user.id", primary_key=True, sa_type=sqlalchemy.BigInteger)
     guild_id: int = sql.Field(foreign_key="guild.id", primary_key=True, sa_type=sqlalchemy.BigInteger)
+    invite_id: int = sql.Field(foreign_key="invite.id", primary_key=True, sa_type=sqlalchemy.BigInteger)
 
     timed_out: bool = False
     nickname: typing.Optional[str] = None
     joined_at: datetime.datetime = sql.Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc))
 
-    user: "User" = sql.Relationship(back_populates="memberships")
-    guild: "Guild" = sql.Relationship(back_populates="members")
+    user: User = sql.Relationship(back_populates="memberships")
+    guild: Guild = sql.Relationship(back_populates="members")
+    invite: "Invite" = sql.Relationship(back_populates="users")
 
 class Channel(sql.SQLModel, table=True):
     id: int = sql.Field(primary_key=True, sa_type=sqlalchemy.BigInteger)
@@ -91,3 +94,13 @@ class Message(sql.SQLModel, table=True):
 
     author: User = sql.Relationship()
     mentions: list[Mention] = sql.Relationship(back_populates="message")
+
+class Invite(sql.SQLModel, table=True):
+    id: int = sql.Field(primary_key=True, sa_type=sqlalchemy.BigInteger)
+    guild_id: int = sql.Field(foreign_key="guild.id", sa_type=sqlalchemy.BigInteger)
+    author_id: int = sql.Field(foreign_key="user.id", sa_type=sqlalchemy.BigInteger)
+    creation_timestamp: typing.Optional[datetime.datetime] = None
+
+    guild: Guild = sql.Relationship(back_populates="invites")
+    author: User = sql.Relationship()
+    users: list[Member] = sql.Relationship(back_populates="invite")
