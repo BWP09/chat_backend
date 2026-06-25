@@ -112,7 +112,7 @@ class Channel(APIBase):
             "type": self.type.value,
             "name": self.name,
             "participants": [participant.jsonable() for participant in self.participants],
-            "guild_id": self.guild_id,
+            "guild_id": str(self.guild_id),
         }
 
     @classmethod
@@ -281,6 +281,14 @@ class Mention(APIBase):
             "user": self.user.jsonable() if self.user is not None else None,
             "channel": self.channel.jsonable() if self.channel is not None else None,
         }
+    
+    @classmethod
+    def from_db(cls, db_type: db.Mention) -> typing.Self:
+        return cls(
+            type = db_type.type,
+            user = User.from_db(db_type.user),
+            channel = Channel.from_db(db_type.channel)
+        )
 
 # class MessageReference(APIBase):
 #     def __init__(
@@ -329,17 +337,33 @@ class Message(APIBase):
         return {
             "id": str(self.id),
             "type": self.type.value,
-            "channel_id": self.channel_id,
+            "channel_id": str(self.channel_id),
             "author": self.author.jsonable(),
             "content": self.content,
             "edit_timestamp": self.edit_timestamp.timestamp() if self.edit_timestamp is not None else None,
             "mentions": [mention.jsonable() for mention in self.mentions] if self.mentions is not None else None,
             "pinned": self.pinned,
-            "message_reference_id": self.message_reference_id,
+            "message_reference_id": str(self.message_reference_id),
         }
+
+    @classmethod
+    def from_db(cls, db_type: db.Message) -> typing.Self:
+        return cls(
+            id = db_type.id,
+            type = db_type.type,
+            channel_id = db_type.channel_id,
+            author = User.from_db(db_type.author),
+            content = db_type.content,
+            pinned = db_type.pinned,
+            edit_timestamp = db_type.edit_timestamp,
+            mentions = [Mention.from_db(mention) for mention in db_type.mentions],
+            message_reference_id = db_type.message_reference_id
+        )
 
 class APIException(Exception):
     ...
+
+from result import Result, Ok, Err
 
 class Client:
     def __init__(self, server: str, base_url: str = "/api/v1") -> None:
@@ -352,7 +376,15 @@ class Client:
         
         return {"Authorization": f"Bearer {self.token}"}
 
-    def get_token(self, username: str, password: str):
+    def get_token(self, username: str, password: str) -> Result[str, str]:
+        r = rq.post(f"{self.base_url}/auth/login", json = {"username": username, "password": password})
+        
+        if r.status_code != 200:
+            return Err(r.json()["error"])
+        
+        return Ok(r.json()["token"])
+
+    def get_token_print(self, username: str, password: str):
         r = rq.post(f"{self.base_url}/auth/login", json = {"username": username, "password": password})
 
         if r.status_code != 200:
@@ -437,4 +469,19 @@ class Client:
     def get_channel(self, id: int) -> tuple[int, typedef.jsonable]:
         r = rq.get(f"{self.base_url}/channels/{id}", headers = self.__auth_header())
         
+        return r.status_code, r.json()
+
+    def get_message(self, channel_id: int, message_id: int) -> tuple[int, typedef.jsonable]:
+        r = rq.get(f"{self.base_url}/channels/{channel_id}/messages/{message_id}", headers = self.__auth_header())
+
+        return r.status_code, r.json()
+
+    def add_participant(self, channel_id: int, user_id: int) -> tuple[int, typedef.jsonable]:
+        r = rq.post(f"{self.base_url}/channels/{channel_id}/participants/{user_id}", headers = self.__auth_header())
+
+        return r.status_code, r.json()
+
+    def query_user_by_username(self, username: str) -> tuple[int, typedef.jsonable]:
+        r = rq.get(f"{self.base_url}/query/users/{username}", headers = self.__auth_header())
+
         return r.status_code, r.json()

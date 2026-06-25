@@ -36,7 +36,7 @@ class Guild(sql.SQLModel, table=True):
 class Member(sql.SQLModel, table=True):
     user_id: int = sql.Field(foreign_key="user.id", primary_key=True, sa_type=sqlalchemy.BigInteger)
     guild_id: int = sql.Field(foreign_key="guild.id", primary_key=True, sa_type=sqlalchemy.BigInteger)
-    invite_id: int = sql.Field(foreign_key="invite.id", primary_key=True, sa_type=sqlalchemy.BigInteger)
+    invite_id: int = sql.Field(foreign_key="invite.id", sa_type=sqlalchemy.BigInteger)
 
     timed_out: bool = False
     nickname: typing.Optional[str] = None
@@ -81,6 +81,8 @@ class Mention(sql.SQLModel, table=True):
     channel_id: int = sql.Field(foreign_key="channel.id", sa_type=sqlalchemy.BigInteger)
 
     message: "Message" = sql.Relationship(back_populates="mentions")
+    user: User = sql.Relationship()
+    channel: Channel = sql.Relationship()
 
 class Message(sql.SQLModel, table=True):
     id: int = sql.Field(primary_key=True, sa_type=sqlalchemy.BigInteger)
@@ -99,8 +101,19 @@ class Invite(sql.SQLModel, table=True):
     id: int = sql.Field(primary_key=True, sa_type=sqlalchemy.BigInteger)
     guild_id: int = sql.Field(foreign_key="guild.id", sa_type=sqlalchemy.BigInteger)
     author_id: int = sql.Field(foreign_key="user.id", sa_type=sqlalchemy.BigInteger)
-    creation_timestamp: typing.Optional[datetime.datetime] = None
 
     guild: Guild = sql.Relationship(back_populates="invites")
     author: User = sql.Relationship()
     users: list[Member] = sql.Relationship(back_populates="invite")
+
+class Friendship(sql.SQLModel, table=True):
+    from_id: int = sql.Field(primary_key=True, foreign_key="user.id", sa_type=sqlalchemy.BigInteger)
+    to_id: int = sql.Field(primary_key=True, foreign_key="user.id", sa_type=sqlalchemy.BigInteger)
+    mutual: bool
+
+    from_user: User = sql.Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Friendship.from_id]", "primaryjoin": "Friendship.from_id == User.id"}
+    )
+    to_user: User = sql.Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Friendship.to_id]", "primaryjoin": "Friendship.to_id == User.id"}
+    )

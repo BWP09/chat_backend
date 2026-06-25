@@ -1,4 +1,4 @@
-import flask as fl, sqlmodel as sql, sqlalchemy.exc as sql_e, datetime, functools, typing
+import flask as fl, sqlmodel as sql, sqlalchemy.exc as sql_e, datetime, functools, typing, random, time
 import snowflake # type: ignore
 import typedef, crypt, api, db
 
@@ -83,6 +83,10 @@ sql.SQLModel.metadata.create_all(engine)
 
 base_url = "/api/v1"
 
+@app.before_request
+def simulate_latency():
+    time.sleep(random.random()*0.0 + 0.01)
+
 @app.errorhandler(404)
 def handle_404(_: Exception | int):
     return http_error(404)
@@ -108,7 +112,8 @@ def route_auth_create():
             return http_error(400, "`username` must be a string")
         
         user = session.exec(
-            sql.select(db.User).where(db.User.username == username)
+            sql.select(db.User)
+                .where(db.User.username == username)
         ).first()
 
         if user is not None:
@@ -175,7 +180,8 @@ def route_auth_login():
             return http_error(400, "`password` must be a string")
 
         user = session.exec(
-            sql.select(db.User).where(db.User.username == username)
+            sql.select(db.User)
+                .where(db.User.username == username)
         ).first()
 
         if user is None or not crypt.verify_password(password, user.password_hash):
@@ -203,7 +209,8 @@ def route_auth_logout():
         auth_user = get_auth_user(session)
         
         auth_token = session.exec(
-            sql.select(db.AuthToken).where(db.AuthToken.user_id == auth_user.id)
+            sql.select(db.AuthToken)
+                .where(db.AuthToken.user_id == auth_user.id)
         ).first()
 
         if auth_token is None:
@@ -296,7 +303,8 @@ def route_specific_guild(guild_id: int):
         match fl.request.method:
             case "GET": # Get guild info
                 guild = session.exec(
-                    sql.select(db.Guild).where(db.Guild.id == guild_id)
+                    sql.select(db.Guild)
+                        .where(db.Guild.id == guild_id)
                 ).first()
                 
                 if guild is None:
@@ -335,7 +343,8 @@ def route_all_channels(guild_id: int):
         match fl.request.method:
             case "GET": # Get guild channels
                 guild = session.exec(
-                    sql.select(db.Guild).where(db.Guild.id == guild_id)
+                    sql.select(db.Guild)
+                        .where(db.Guild.id == guild_id)
                 ).first()
                 
                 if guild is None:
@@ -409,11 +418,11 @@ def route_all_channels(guild_id: int):
 def route_all_invites(guild_id: int):
     with sql.Session(engine) as session:
         match fl.request.method:
-            case "GET":
-                ...
+            case "GET": # Get guild invites
+                return f"GET: {guild_id}"
             
-            case "POST":
-                ...
+            case "POST": # Create guild invite
+                return f"POST: {guild_id}"
                 
             case _:
                 return http_error(405)
@@ -425,7 +434,8 @@ def route_specific_channel(channel_id: int):
         match fl.request.method:
             case "GET": # Get channel info
                 channel = session.exec(
-                    sql.select(db.Channel).where(db.Channel.id == channel_id)
+                    sql.select(db.Channel)
+                        .where(db.Channel.id == channel_id)
                 ).first()
                 
                 if channel is None:
@@ -448,7 +458,28 @@ def route_all_messages(channel_id: int):
     with sql.Session(engine) as session:
         match fl.request.method:
             case "GET": # Get messages
-                return "200"
+                auth_user = get_auth_user(session)
+
+                limit = int(fl.request.args.get("limit", 50))
+                before = fl.request.args.get("before")
+                after = fl.request.args.get("after")
+
+                if before is not None:
+                    before = int(before)
+
+                if after is not None:
+                    after = int(after)
+
+                messages = session.exec(
+                    sql.select(db.Message)
+                        .where(db.Message.channel_id == channel_id)
+                        .order_by(sql.desc(db.Message.id))
+                        .limit(limit if limit <= 50 else 50)
+                ).all()
+
+                api_messages = [api.Message.from_db(message).jsonable() for message in messages]
+
+                return fl.jsonify(list(reversed(api_messages)))
 
             case "POST": # Send message
                 auth_user = get_auth_user(session)
@@ -473,7 +504,7 @@ def route_all_messages(channel_id: int):
                 content = json.get("content")
                 message_reference_id = json.get("message_reference_id")
 
-                if type(content) != str:
+                if type(content) != str or content == "":
                     return http_error(400)
 
                 if type(message_reference_id) != int and message_reference_id is not None:
@@ -521,23 +552,122 @@ def route_all_messages(channel_id: int):
             case _:
                 return http_error(405)
 
-@app.route(f"{base_url}/channels/<int:channel_id>/messages/<int:message_id>", methods = ["GET", "PATCH"])
+@app.route(f"{base_url}/channels/<int:channel_id>/messages/<int:message_id>", methods = ["GET", "PATCH", "DELETE"])
 @token_required
 def route_specific_message(channel_id: int, message_id: int):
-    match fl.request.method:
-        case "GET": # Get message
-            return "200"
+    with sql.Session(engine) as session:
+        match fl.request.method:
+            case "GET": # Get message
+                selected = session.exec(
+                    sql.select(db.Message)
+                        .where(db.Message.channel_id == channel_id)
+                        .where(db.Message.id == message_id)
+                ).one()
 
-        case "PATCH": # Edit message
-            return "200"
+                return fl.jsonify(api.Message.from_db(selected).jsonable())
 
-        case "DELETE": # Delete message
-            return "200"
+            case "PATCH": # Edit message
+                json: typedef.jsondict | None = fl.request.json
 
-        case _:
-            return fl.jsonify({
-                "error": "method not allowed"
-            }), 405
+                if json is None:
+                    return http_error(400)
+                
+                content = json.get("content")
+
+                if type(content) != str or content == "":
+                    return http_error(400)
+
+                selected = session.exec(
+                    sql.select(db.Message)
+                        .where(db.Message.channel_id == channel_id)
+                        .where(db.Message.id == message_id)
+                ).one()
+                
+                if (content := str(content)) == selected.content:
+                    return fl.jsonify(api.Message.from_db(selected).jsonable())
+
+                selected.content = content
+                selected.edit_timestamp = datetime.datetime.now()
+
+                try:
+                    session.commit()
+
+                except sql_e.IntegrityError:
+                    return http_error(500, "UPDATE failed integrity check")
+
+                return fl.jsonify(api.Message.from_db(selected).jsonable())
+
+            case "DELETE": # Delete message
+                auth_user = get_auth_user(session)
+
+                print()
+                print(channel_id, message_id)
+                print()
+
+                message = session.exec(
+                    sql.select(db.Message)
+                        .where(db.Message.channel_id == channel_id)
+                        .where(db.Message.id == message_id)
+                        # .where(db.Message.author_id == auth_user.id)
+                ).one()
+
+                # if message.author_id != auth_user.id: return
+
+                session.delete(message)
+                
+                try:
+                    session.commit()
+
+                except sql_e.IntegrityError:
+                    return http_error(500, "DELETE failed integrity check")
+
+                return fl.jsonify(api.Message.from_db(message).jsonable())
+
+            case _:
+                return fl.jsonify({
+                    "error": "method not allowed"
+                }), 405
+
+@app.route(f"{base_url}/channels/<int:channel_id>/participants/<int:user_id>", methods = ["POST", "DELETE"])
+@token_required
+def route_channel_participants(channel_id: int, user_id: int):
+    with sql.Session(engine) as session:
+        match fl.request.method:
+            # case "GET": # Get channel participants
+            #     channel = session.exec(
+            #         sql.select(db.Channel)
+            #             .where(db.Channel.id == channel_id)
+            #     ).first()
+                
+            #     if channel is None:
+            #         return http_error(404, "channel not found")
+                
+            #     return fl.jsonify(api.Channel.from_db(channel).participants)
+
+            case "POST": # Add channel participant
+                selected = session.exec(
+                    sql.select(db.Channel)
+                        .where(db.Channel.id == channel_id)
+                ).one()
+                
+                selected.participants.append(db.ChannelParticipant(
+                    user_id = user_id,
+                    channel_id = channel_id
+                ))
+
+                try:
+                    session.commit()
+
+                except sql_e.IntegrityError:
+                    return http_error(500, "UPDATE failed integrity check")
+
+                return fl.jsonify(api.Channel.from_db(selected).jsonable())
+
+            case "DELETE": # Delete channel
+                return f"DELETE: {channel_id}"
+            
+            case _:
+                return http_error(405)
 
 @app.route(f"{base_url}/guilds/<int:guild_id>/members", methods = ["GET"])
 @token_required
@@ -552,21 +682,38 @@ def route_all_members(guild_id: int):
 @app.route(f"{base_url}/guilds/<int:guild_id>/members/<int:user_id>", methods = ["GET", "PUT", "PATCH", "DELETE"])
 @token_required
 def route_specific_member(guild_id: int, user_id: int):
-    match fl.request.method:
-        case "GET": # Get guild member
-            return f"GET: {user_id}"
-        
-        case "PUT": # Add guild member
-            return f"PUT: {user_id}"
+    with sql.Session(engine) as session:
+        match fl.request.method:
+            case "GET": # Get guild member
+                return f"GET: {user_id}"
+            
+            case "PUT": # Add guild member
+                selected = session.exec(
+                    sql.select(db.Guild)
+                        .where(db.Guild.id == guild_id)
+                ).one()
+                
+                selected.members.append(db.Member(
+                    user_id = user_id,
+                    guild_id = guild_id
+                ))
 
-        case "PATCH": # Modify guild member
-            return f"PATCH: {user_id}"
+                try:
+                    session.commit()
 
-        case "DELETE": # Remove guild member
-            return f"DELETE: {user_id}"
+                except sql_e.IntegrityError:
+                    return http_error(500, "UPDATE failed integrity check")
 
-        case _:
-            return http_error(405)
+                return fl.jsonify(api.Channel.from_db(selected).jsonable())
+
+            case "PATCH": # Modify guild member
+                return f"PATCH: {user_id}"
+
+            case "DELETE": # Remove guild member
+                return f"DELETE: {user_id}"
+
+            case _:
+                return http_error(405)
         
 @app.route(f"{base_url}/guilds/<int:guild_id>/roles", methods = ["GET", "POST"])
 @token_required
@@ -670,6 +817,24 @@ def route_user_guilds(user_id: int):
             case "PUT": # Edit self's info
                 return f"PUT: {user_id}"
 
+            case _:
+                return http_error(405)
+
+@app.route(f"{base_url}/query/users/<username>", methods = ["GET"])
+@token_required
+def route_query_user_username(username: str):
+    with sql.Session(engine) as session:
+        match fl.request.method:
+            case "GET": # Get user from username
+                user = session.exec(
+                    sql.select(db.User).where(db.User.username == username)
+                ).first()
+                
+                if user is None:
+                    return http_error(404, "user not found")
+                
+                return fl.jsonify(api.User.from_db(user).jsonable())
+            
             case _:
                 return http_error(405)
 
