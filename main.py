@@ -693,7 +693,7 @@ def route_specific_member(guild_id: int, user_id: int):
                         .where(db.Guild.id == guild_id)
                 ).one()
                 
-                selected.members.append(db.Member(
+                selected.members.append(added := db.Member(
                     user_id = user_id,
                     guild_id = guild_id
                 ))
@@ -704,7 +704,7 @@ def route_specific_member(guild_id: int, user_id: int):
                 except sql_e.IntegrityError:
                     return http_error(500, "UPDATE failed integrity check")
 
-                return fl.jsonify(api.Channel.from_db(selected).jsonable())
+                return fl.jsonify(api.Member.from_db(added).jsonable())
 
             case "PATCH": # Modify guild member
                 return f"PATCH: {user_id}"
